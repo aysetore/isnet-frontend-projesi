@@ -6,70 +6,104 @@ import PersonelGuncelleForm from "./PersonellerGuncelleForm";
 import { apiFetch } from "../api";
 import type { Personel } from "../types";
 import { Toast } from "../utils";
+import { useQuery } from "@tanstack/react-query";
 
 export default function PersonellerTablosu() {
-    const [personeller, setPersoneller] = useState<Personel[]>([]);
     const [isEkleModalOpen, setIsEkleModalOpen] = useState(false);
     const [isGuncelleModalOpen, setIsGuncelleModalOpen] = useState(false);
     const [seciliPersonel, setSeciliPersonel] = useState<Personel | null>(null);
 
-    const personelleriGetir = () => {
-        apiFetch("/Personeller")
-            .then((res) => res.json())
-            .then((data: unknown) => {
-                const responseData = data as {
-                    data?: unknown[];
-                    Data?: unknown[];
-                };
-                const hamListe =
-                    responseData.data ||
-                    responseData.Data ||
-                    (Array.isArray(data) ? data : []);
+    const {
+        data: personeller = [],
+        isLoading: personellerYukleniyor,
+        refetch: personelleriYenile,
+    } = useQuery<Personel[]>({
+        queryKey: ["personeller"],
+        queryFn: async () => {
+            const res = await apiFetch("/Personeller");
 
-                const duzenlenmisListe: Personel[] = hamListe.map(
-                    (item: unknown) => {
-                        const rec = item as Record<string, unknown>;
-                        return {
-                            id: Number(rec.id || 0),
-                            ad: String(rec.ad || ""),
-                            soyad: String(rec.soyad || ""),
-                        };
-                    },
-                );
+            if (!res.ok) {
+                throw new Error("Personeller getirilemedi.");
+            }
 
-                setPersoneller(duzenlenmisListe);
-            })
-            .catch((err) => console.error("Hata:", err));
-    };
+            const data: unknown = await res.json();
+
+            const responseData = data as {
+                data?: unknown[];
+                Data?: unknown[];
+            };
+
+            const hamListe =
+                responseData.data ||
+                responseData.Data ||
+                (Array.isArray(data) ? data : []);
+
+            const duzenlenmisListe: Personel[] = hamListe.map(
+                (item: unknown) => {
+                    const rec = item as Record<string, unknown>;
+
+                    return {
+                        id: Number(rec.id ?? rec.Id ?? 0),
+                        ad: String(rec.ad ?? rec.Ad ?? ""),
+                        soyad: String(rec.soyad ?? rec.Soyad ?? ""),
+                        personelAdi: String(
+                            rec.personelAdi ??
+                                rec.PersonelAdi ??
+                                rec.ad ??
+                                rec.Ad ??
+                                "",
+                        ),
+                        Adi: String(rec.Adi ?? rec.ad ?? rec.Ad ?? ""),
+                    };
+                },
+            );
+
+            return duzenlenmisListe;
+        },
+    });
 
     useEffect(() => {
-        personelleriGetir();
-    }, []);
+        personelleriYenile();
+    }, [personelleriYenile]);
 
-    const handleDelete = (id: number) => {
-        if (
-            window.confirm(
-                `${id} ID numaralı personeli silmek istediğinize emin misiniz?`,
-            )
-        ) {
-            apiFetch(`/Personeller/${id}`, {
+    const handleDelete = async (id: number) => {
+        const onay = window.confirm(
+            `${id} ID numaralı personeli silmek istediğinize emin misiniz?`,
+        );
+
+        if (!onay) {
+            return;
+        }
+
+        try {
+            const res = await apiFetch(`/Personeller/${id}`, {
                 method: "DELETE",
-            })
-                .then((res) => {
-                    if (res.ok) {
-                        personelleriGetir();
-                        Toast.fire({
-                            icon: "success",
-                            title: "Personel silindi!",
-                        });
-                    } else {
-                        Toast.fire({
-                            icon: "error",
-                            title: "Silinemedi!",
-                        });
-                    }
-                })
-                .catch((err) => console.error("Silme hatası:", err));
+            });
+
+            if (res.ok) {
+                await personelleriYenile();
+
+                Toast.fire({
+                    icon: "success",
+                    title: "Personel silindi!",
+                });
+            } else {
+                const hata = await res.text();
+
+                console.error("Personel silme hatası:", hata);
+
+                Toast.fire({
+                    icon: "error",
+                    title: "Personel silinemedi!",
+                });
+            }
+        } catch (err) {
+            console.error("Silme hatası:", err);
+
+            Toast.fire({
+                icon: "error",
+                title: "Sunucuya ulaşılamadı!",
+            });
         }
     };
 
@@ -86,6 +120,7 @@ export default function PersonellerTablosu() {
                 position: "relative",
             }}
         >
+            {/* BAŞLIK */}
             <div
                 style={{
                     display: "flex",
@@ -95,6 +130,7 @@ export default function PersonellerTablosu() {
                 }}
             >
                 <h2>Personel Listesi</h2>
+
                 <button
                     onClick={() => setIsEkleModalOpen(true)}
                     style={{
@@ -111,29 +147,57 @@ export default function PersonellerTablosu() {
                 </button>
             </div>
 
+            {/* PERSONEL TABLOSU */}
             <table
                 border={1}
                 cellPadding={10}
-                style={{ width: "100%", borderCollapse: "collapse" }}
+                style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                }}
             >
                 <thead>
-                    <tr style={{ background: "#f4f4f4", textAlign: "left" }}>
+                    <tr
+                        style={{
+                            background: "#f4f4f4",
+                            textAlign: "left",
+                        }}
+                    >
                         <th>ID</th>
                         <th>Ad</th>
                         <th>Soyad</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
+
                 <tbody>
-                    {personeller.length > 0 ? (
-                        personeller.map((p: Personel) => (
-                            <tr key={p.id}>
-                                <td>{p.id}</td>
-                                <td>{p.ad}</td>
-                                <td>{p.soyad}</td>
+                    {personellerYukleniyor ? (
+                        <tr>
+                            <td
+                                colSpan={4}
+                                style={{
+                                    textAlign: "center",
+                                    padding: "20px",
+                                }}
+                            >
+                                Yükleniyor...
+                            </td>
+                        </tr>
+                    ) : personeller.length > 0 ? (
+                        personeller.map((personel) => (
+                            <tr key={personel.id}>
+                                <td>{personel.id}</td>
+
+                                <td>{personel.ad}</td>
+
+                                <td>{personel.soyad}</td>
+
                                 <td>
+                                    {/* DÜZENLE */}
                                     <button
-                                        onClick={() => handleEditClick(p)}
+                                        onClick={() =>
+                                            handleEditClick(personel)
+                                        }
                                         title="Düzenle"
                                         style={{
                                             background: "none",
@@ -146,8 +210,12 @@ export default function PersonellerTablosu() {
                                     >
                                         <FaEdit />
                                     </button>
+
+                                    {/* SİL */}
                                     <button
-                                        onClick={() => handleDelete(p.id)}
+                                        onClick={() =>
+                                            handleDelete(personel.id)
+                                        }
                                         title="Sil"
                                         style={{
                                             background: "none",
@@ -166,15 +234,19 @@ export default function PersonellerTablosu() {
                         <tr>
                             <td
                                 colSpan={4}
-                                style={{ textAlign: "center", padding: "20px" }}
+                                style={{
+                                    textAlign: "center",
+                                    padding: "20px",
+                                }}
                             >
-                                Yükleniyor...
+                                Personel bulunamadı.
                             </td>
                         </tr>
                     )}
                 </tbody>
             </table>
 
+            {/* PERSONEL EKLE */}
             <Modal
                 isOpen={isEkleModalOpen}
                 onClose={() => setIsEkleModalOpen(false)}
@@ -182,12 +254,13 @@ export default function PersonellerTablosu() {
             >
                 <PersonelEkleForm
                     onClose={() => setIsEkleModalOpen(false)}
-                    onPersonelEklendi={() => {
-                        personelleriGetir();
+                    onPersonelEklendi={async () => {
+                        await personelleriYenile();
                     }}
                 />
             </Modal>
 
+            {/* PERSONEL GÜNCELLE */}
             {seciliPersonel && (
                 <Modal
                     isOpen={isGuncelleModalOpen}
@@ -197,8 +270,8 @@ export default function PersonellerTablosu() {
                     <PersonelGuncelleForm
                         seciliPersonel={seciliPersonel}
                         onClose={() => setIsGuncelleModalOpen(false)}
-                        onPersonelGuncellendi={() => {
-                            personelleriGetir();
+                        onPersonelGuncellendi={async () => {
+                            await personelleriYenile();
                         }}
                     />
                 </Modal>

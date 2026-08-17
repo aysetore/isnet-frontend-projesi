@@ -1,26 +1,26 @@
 import React, { useState } from "react";
 import { apiFetch } from "../api";
-import type { PersonelCreate } from "../types"; // 1. Merkezi tipi import et
+import type { PersonelCreate } from "../types";
 import { Toast } from "../utils";
 
 interface PersonelEkleFormProps {
     onClose: () => void;
-    onPersonelEklendi: () => void; // 2. Props tipini güncelle
+    onPersonelEklendi: () => void;
 }
 
 export default function PersonelEkleForm({
     onClose,
     onPersonelEklendi,
 }: PersonelEkleFormProps) {
-    const [personelAdi, setPersonelAdi] = useState("");
-    const [personelSoyadi, setPersonelSoyadi] = useState("");
+    const [ad, setAd] = useState("");
+    const [soyad, setSoyad] = useState("");
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        const yeniPersonelPayload: PersonelCreate = {
-            ad: personelAdi,
-            soyad: personelSoyadi,
+        const yeniPersonel: PersonelCreate = {
+            ad,
+            soyad,
         };
 
         try {
@@ -29,72 +29,107 @@ export default function PersonelEkleForm({
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(yeniPersonelPayload),
+                body: JSON.stringify(yeniPersonel),
             });
 
             if (res.ok) {
-                onClose();
-                onPersonelEklendi();
-
                 Toast.fire({
                     icon: "success",
                     title: "Personel başarıyla kaydedildi!",
                 });
+
+                onPersonelEklendi();
+                onClose();
+
+                setAd("");
+                setSoyad("");
             } else {
+                const hata = await res.text();
+                console.error("Personel ekleme hatası:", hata);
+
                 Toast.fire({
                     icon: "error",
-                    title: "Bu isim ve soyisimde bir personel zaten kayıtlı!",
+                    title: "Personel eklenemedi!",
                 });
             }
-        } catch (err) {
-            console.error("Hata:", err);
+        } catch (error) {
+            console.error("Bağlantı hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Sunucuya ulaşılamadı!",
+            });
         }
     };
 
     return (
         <form
             onSubmit={handleSubmit}
-            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                minWidth: "300px",
+            }}
         >
             <input
                 type="text"
                 placeholder="Personel Adı"
-                value={personelAdi}
-                onChange={(e) => setPersonelAdi(e.target.value)}
+                value={ad}
+                onChange={(e) => setAd(e.target.value)}
                 required
-                style={{ padding: "8px" }}
+                style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ccc",
+                }}
             />
+
             <input
                 type="text"
                 placeholder="Personel Soyadı"
-                value={personelSoyadi}
-                onChange={(e) => setPersonelSoyadi(e.target.value)}
+                value={soyad}
+                onChange={(e) => setSoyad(e.target.value)}
                 required
-                style={{ padding: "8px" }}
+                style={{
+                    padding: "8px",
+                    borderRadius: "4px",
+                    border: "1px solid #ccc",
+                }}
             />
+
             <div
                 style={{
                     display: "flex",
                     justifyContent: "flex-end",
-                    gap: "5px",
+                    gap: "8px",
                     marginTop: "10px",
                 }}
             >
                 <button
                     type="button"
                     onClick={onClose}
-                    style={{ padding: "6px 12px" }}
+                    style={{
+                        padding: "8px 14px",
+                        border: "1px solid #ccc",
+                        borderRadius: "4px",
+                        background: "#fff",
+                        cursor: "pointer",
+                    }}
                 >
                     İptal
                 </button>
+
                 <button
                     type="submit"
                     style={{
-                        padding: "6px 12px",
+                        padding: "8px 14px",
                         background: "#28a745",
                         color: "white",
                         border: "none",
                         borderRadius: "4px",
+                        cursor: "pointer",
+                        fontWeight: "bold",
                     }}
                 >
                     Kaydet

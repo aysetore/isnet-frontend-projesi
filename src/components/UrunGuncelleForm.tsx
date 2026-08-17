@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import type { Urun } from "../types";
 import { Toast } from "../utils";
@@ -6,7 +6,7 @@ import { Toast } from "../utils";
 interface UrunGuncelleFormProps {
     seciliUrun: Urun | null;
     onClose: () => void;
-    onUrunGuncellendi: (guncellenenUrun: Urun) => void;
+    onUrunGuncellendi: () => void;
 }
 
 export default function UrunGuncelleForm({
@@ -19,52 +19,68 @@ export default function UrunGuncelleForm({
 
     useEffect(() => {
         if (seciliUrun) {
-            setUrunKodu(seciliUrun.urunKodu);
-            setUrunAdi(seciliUrun.urunAdi);
+            setUrunKodu(seciliUrun.urunKodu || "");
+            setUrunAdi(seciliUrun.urunAdi || "");
         }
     }, [seciliUrun]);
 
-    const handleUpdate = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!seciliUrun) {
+            return;
+        }
 
         const guncelVeri = {
             UrunKodu: urunKodu,
             UrunAd: urunAdi,
         };
 
-        apiFetch(`/Urunler/${urunKodu}`, {
-            method: "PUT",
-            body: JSON.stringify(guncelVeri),
-        })
-            .then(async (res) => {
-                if (res.ok) {
-                    onUrunGuncellendi({
-                        urunKodu,
-                        urunAdi,
-                        ad: undefined,
-                        id: 0,
-                    });
-                    onClose();
-                    Toast.fire({
-                        icon: "success",
-                        title: "Ürün başarıyla güncellendi!",
-                    });
-                } else {
-                    const hataDetayi = await res.text();
-                    console.error("Sunucu Hata Detayı:", hataDetayi);
-                    Toast.fire({
-                        icon: "error",
-                        title: "Güncellenemedi!",
-                    });
-                }
-            })
-            .catch((err) => console.error("Bağlantı Hatası:", err));
+        try {
+            const res = await apiFetch(`/Urunler/${urunKodu}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(guncelVeri),
+            });
+
+            if (res.ok) {
+                Toast.fire({
+                    icon: "success",
+                    title: "Ürün başarıyla güncellendi!",
+                });
+
+                onUrunGuncellendi();
+                onClose();
+            } else {
+                const hataDetayi = await res.text();
+                console.error("Ürün güncelleme hatası:", hataDetayi);
+
+                Toast.fire({
+                    icon: "error",
+                    title: "Ürün güncellenemedi!",
+                });
+            }
+        } catch (error) {
+            console.error("Bağlantı hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Sunucuya ulaşılamadı!",
+            });
+        }
     };
 
     return (
         <form
-            onSubmit={handleUpdate}
-            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            onSubmit={handleSubmit}
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                minWidth: "300px",
+            }}
         >
             <input
                 type="text"
@@ -74,40 +90,56 @@ export default function UrunGuncelleForm({
                 style={{
                     padding: "8px",
                     background: "#e9ecef",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
                     cursor: "not-allowed",
                 }}
             />
+
             <input
                 type="text"
                 placeholder="Ürün Adı"
                 value={urunAdi}
                 onChange={(e) => setUrunAdi(e.target.value)}
                 required
-                style={{ padding: "8px" }}
+                style={{
+                    padding: "8px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                }}
             />
+
             <div
                 style={{
                     display: "flex",
                     justifyContent: "flex-end",
-                    gap: "5px",
+                    gap: "8px",
                     marginTop: "10px",
                 }}
             >
                 <button
                     type="button"
                     onClick={onClose}
-                    style={{ padding: "6px 12px" }}
+                    style={{
+                        padding: "8px 14px",
+                        border: "1px solid #ccc",
+                        borderRadius: "4px",
+                        background: "#fff",
+                        cursor: "pointer",
+                    }}
                 >
                     İptal
                 </button>
+
                 <button
                     type="submit"
                     style={{
-                        padding: "6px 12px",
+                        padding: "8px 14px",
                         background: "#ffc107",
-                        color: "black",
+                        color: "#000",
                         border: "none",
                         borderRadius: "4px",
+                        cursor: "pointer",
                         fontWeight: "bold",
                     }}
                 >

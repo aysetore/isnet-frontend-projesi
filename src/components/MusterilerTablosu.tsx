@@ -1,54 +1,82 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FaTrashAlt, FaEdit } from "react-icons/fa";
+import Swal from "sweetalert2";
 import Modal from "./Modal";
 import MusteriEkleForm from "./MusteriEkleForm";
 import MusteriGuncelleForm from "./MusteriGuncelleForm";
 import { apiFetch } from "../api";
 import type { Musteri } from "../types";
 import { Toast } from "../utils";
+import { useQuery } from "@tanstack/react-query";
 
 export default function MusterilerTablosu() {
-    const [musteriler, setMusteriler] = useState<Musteri[]>([]);
     const [isEkleModalOpen, setIsEkleModalOpen] = useState(false);
     const [isGuncelleModalOpen, setIsGuncelleModalOpen] = useState(false);
     const [seciliMusteri, setSeciliMusteri] = useState<Musteri | null>(null);
 
-    useEffect(() => {
-        loadData();
-    }, []);
+    const {
+        data: musteriler = [],
+        isLoading: musterilerYukleniyor,
+        refetch: musterileriYenile,
+    } = useQuery<Musteri[]>({
+        queryKey: ["musteriler"],
 
-    const loadData = () => {
-        apiFetch("/Musteriler")
-            .then((res) => res.json())
-            .then((data) => {
-                const liste =
-                    data.data || data.Data || (Array.isArray(data) ? data : []);
-                setMusteriler(liste);
-            })
-            .catch((err) => console.error("Hata:", err));
-    };
+        queryFn: async () => {
+            const res = await apiFetch("/Musteriler");
 
-    const handleDelete = (id: number) => {
-        if (
-            window.confirm(
-                `${id} ID numaralı müşteriyi silmek istediğinize emin misiniz?`,
-            )
-        ) {
-            apiFetch(`/Musteriler/${id}`, {
+            if (!res.ok) {
+                throw new Error("Müşteriler getirilemedi.");
+            }
+
+            const data = await res.json();
+
+            const liste =
+                data.data || data.Data || (Array.isArray(data) ? data : []);
+
+            return liste;
+        },
+    });
+
+    const handleDelete = async (id: number) => {
+        const result = await Swal.fire({
+            title: "Emin misiniz?",
+            text: `${id} ID numaralı müşteriyi silmek istediğinize emin misiniz?`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#dc3545",
+            cancelButtonColor: "#6c757d",
+            confirmButtonText: "Evet, sil!",
+            cancelButtonText: "Vazgeç",
+        });
+
+        if (!result.isConfirmed) {
+            return;
+        }
+
+        try {
+            const res = await apiFetch(`/Musteriler/${id}`, {
                 method: "DELETE",
-            }).then((res) => {
-                if (res.ok) {
-                    Toast.fire({
-                        icon: "success",
-                        title: "Müşteri silindi!",
-                    });
-                    loadData();
-                } else {
-                    Toast.fire({
-                        icon: "error",
-                        title: "Silinemedi!",
-                    });
-                }
+            });
+
+            if (res.ok) {
+                await musterileriYenile();
+
+                Toast.fire({
+                    icon: "success",
+                    title: "Müşteri silindi!",
+                });
+            } else {
+                Toast.fire({
+                    icon: "error",
+                    title: "Silinemedi!",
+                });
+            }
+        } catch (err) {
+            console.error("Müşteri silme hatası:", err);
+
+            Toast.fire({
+                icon: "error",
+                title: "Sunucuya ulaşılamadı!",
             });
         }
     };
@@ -66,6 +94,7 @@ export default function MusterilerTablosu() {
                 position: "relative",
             }}
         >
+            {/* BAŞLIK */}
             <div
                 style={{
                     display: "flex",
@@ -75,6 +104,7 @@ export default function MusterilerTablosu() {
                 }}
             >
                 <h2>Müşteri Listesi</h2>
+
                 <button
                     onClick={() => setIsEkleModalOpen(true)}
                     style={{
@@ -91,27 +121,53 @@ export default function MusterilerTablosu() {
                 </button>
             </div>
 
+            {/* MÜŞTERİ TABLOSU */}
             <table
                 border={1}
                 cellPadding={10}
-                style={{ width: "100%", borderCollapse: "collapse" }}
+                style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                }}
             >
                 <thead>
-                    <tr style={{ background: "#f4f4f4", textAlign: "left" }}>
+                    <tr
+                        style={{
+                            background: "#f4f4f4",
+                            textAlign: "left",
+                        }}
+                    >
                         <th>ID</th>
                         <th>Ad</th>
                         <th>Soyad</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
+
                 <tbody>
-                    {musteriler.length > 0 ? (
+                    {musterilerYukleniyor ? (
+                        <tr>
+                            <td
+                                colSpan={4}
+                                style={{
+                                    textAlign: "center",
+                                    padding: "20px",
+                                }}
+                            >
+                                Yükleniyor...
+                            </td>
+                        </tr>
+                    ) : musteriler.length > 0 ? (
                         musteriler.map((musteri) => (
                             <tr key={musteri.id}>
                                 <td>{musteri.id}</td>
+
                                 <td>{musteri.ad}</td>
+
                                 <td>{musteri.soyad}</td>
+
                                 <td>
+                                    {/* DÜZENLE */}
                                     <button
                                         onClick={() => handleEditClick(musteri)}
                                         title="Düzenle"
@@ -126,6 +182,8 @@ export default function MusterilerTablosu() {
                                     >
                                         <FaEdit />
                                     </button>
+
+                                    {/* SİL */}
                                     <button
                                         onClick={() => handleDelete(musteri.id)}
                                         title="Sil"
@@ -146,14 +204,21 @@ export default function MusterilerTablosu() {
                         <tr>
                             <td
                                 colSpan={4}
-                                style={{ textAlign: "center", padding: "20px" }}
+                                style={{
+                                    textAlign: "center",
+                                    padding: "20px",
+                                }}
                             >
-                                Yükleniyor...
+                                Müşteri bulunamadı.
                             </td>
                         </tr>
                     )}
                 </tbody>
             </table>
+
+            {/* =====================================================
+                YENİ MÜŞTERİ EKLE
+            ===================================================== */}
 
             <Modal
                 isOpen={isEkleModalOpen}
@@ -162,21 +227,23 @@ export default function MusterilerTablosu() {
             >
                 <MusteriEkleForm
                     onClose={() => setIsEkleModalOpen(false)}
-                    onMusteriEklendi={() => loadData()}
+                    onMusteriEklendi={() => musterileriYenile()}
                 />
             </Modal>
 
-            <Modal
-                isOpen={isGuncelleModalOpen}
-                onClose={() => setIsGuncelleModalOpen(false)}
-                baslik="Müşteri Düzenle"
-            >
-                <MusteriGuncelleForm
-                    seciliMusteri={seciliMusteri}
+            {seciliMusteri && (
+                <Modal
+                    isOpen={isGuncelleModalOpen}
                     onClose={() => setIsGuncelleModalOpen(false)}
-                    onMusteriGuncellendi={() => loadData()}
-                />
-            </Modal>
+                    baslik="Müşteri Düzenle"
+                >
+                    <MusteriGuncelleForm
+                        seciliMusteri={seciliMusteri}
+                        onClose={() => setIsGuncelleModalOpen(false)}
+                        onMusteriGuncellendi={() => musterileriYenile()}
+                    />
+                </Modal>
+            )}
         </div>
     );
 }

@@ -1,56 +1,87 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FaTrashAlt, FaEdit } from "react-icons/fa";
+import Swal from "sweetalert2";
 import Modal from "./Modal";
 import UrunEkleForm from "./UrunEkleForm";
 import UrunGuncelleForm from "./UrunGuncelleForm";
 import { apiFetch } from "../api";
 import type { Urun } from "../types";
 import { Toast } from "../utils";
+import { useQuery } from "@tanstack/react-query";
 
 export default function UrunlerTablosu() {
-    const [urunler, setUrunler] = useState<Urun[]>([]);
     const [isEkleModalOpen, setIsEkleModalOpen] = useState(false);
     const [isGuncelleModalOpen, setIsGuncelleModalOpen] = useState(false);
     const [seciliUrun, setSeciliUrun] = useState<Urun | null>(null);
 
-    useEffect(() => {
-        loadData();
-    }, []);
-    const loadData = () => {
-        apiFetch("/Urunler")
-            .then((res) => res.json())
-            .then((data) => {
-                const liste =
-                    data.data || data.Data || (Array.isArray(data) ? data : []);
-                setUrunler(liste);
-            })
-            .catch((err) => console.error("Hata:", err));
-    };
+    const {
+        data: urunler = [],
+        isLoading: urunlerYukleniyor,
+        refetch: urunleriYenile,
+    } = useQuery<Urun[]>({
+        queryKey: ["urunler"],
 
-    const handleDelete = (urunKodu: string) => {
-        if (
-            window.confirm(
-                `${urunKodu} kodlu ürünü silmek istediğinize emin misiniz?`,
-            )
-        ) {
-            apiFetch(`/urunler/${urunKodu}`, { method: "DELETE" }).then(
-                (res) => {
-                    if (res.ok) {
-                        setUrunler((prev) =>
-                            prev.filter((item) => item.urunKodu !== urunKodu),
-                        );
-                        Toast.fire({
-                            icon: "success",
-                            title: "Ürün silindi!",
-                        });
-                    } else {
-                        Toast.fire({
-                            icon: "error",
-                            title: "Silinemedi!",
-                        });
-                    }
-                },
-            );
+        queryFn: async () => {
+            const res = await apiFetch("/Urunler");
+
+            if (!res.ok) {
+                throw new Error("Ürünler getirilemedi.");
+            }
+
+            const data = await res.json();
+
+            const liste =
+                data.data || data.Data || (Array.isArray(data) ? data : []);
+
+            return liste;
+        },
+    });
+
+    const handleDelete = async (urunKodu: string) => {
+        const result = await Swal.fire({
+            title: "Emin misiniz?",
+            text: `${urunKodu} kodlu ürünü silmek istediğinize emin misiniz?`,
+            icon: "warning",
+            showCancelButton: true,
+            confirmButtonColor: "#dc3545",
+            cancelButtonColor: "#6c757d",
+            confirmButtonText: "Evet, sil!",
+            cancelButtonText: "Vazgeç",
+        });
+
+        if (!result.isConfirmed) {
+            return;
+        }
+
+        try {
+            const res = await apiFetch(`/Urunler/${urunKodu}`, {
+                method: "DELETE",
+            });
+
+            if (res.ok) {
+                await urunleriYenile();
+
+                Toast.fire({
+                    icon: "success",
+                    title: "Ürün silindi!",
+                });
+            } else {
+                const hata = await res.text();
+
+                console.error("Ürün silme hatası:", hata);
+
+                Toast.fire({
+                    icon: "error",
+                    title: "Ürün silinemedi!",
+                });
+            }
+        } catch (error) {
+            console.error("Silme hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Sunucuya ulaşılamadı!",
+            });
         }
     };
 
@@ -67,6 +98,7 @@ export default function UrunlerTablosu() {
                 position: "relative",
             }}
         >
+            {/* BAŞLIK */}
             <div
                 style={{
                     display: "flex",
@@ -76,6 +108,7 @@ export default function UrunlerTablosu() {
                 }}
             >
                 <h2>Ürün Listesi</h2>
+
                 <button
                     onClick={() => setIsEkleModalOpen(true)}
                     style={{
@@ -92,25 +125,50 @@ export default function UrunlerTablosu() {
                 </button>
             </div>
 
+            {/* ÜRÜN TABLOSU */}
             <table
                 border={1}
                 cellPadding={10}
-                style={{ width: "100%", borderCollapse: "collapse" }}
+                style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                }}
             >
                 <thead>
-                    <tr style={{ background: "#f4f4f4", textAlign: "left" }}>
+                    <tr
+                        style={{
+                            background: "#f4f4f4",
+                            textAlign: "left",
+                        }}
+                    >
                         <th>Ürün Kodu</th>
                         <th>Ürün Adı</th>
                         <th>İşlemler</th>
                     </tr>
                 </thead>
+
                 <tbody>
-                    {urunler.length > 0 ? (
+                    {urunlerYukleniyor ? (
+                        <tr>
+                            <td
+                                colSpan={3}
+                                style={{
+                                    textAlign: "center",
+                                    padding: "20px",
+                                }}
+                            >
+                                Yükleniyor...
+                            </td>
+                        </tr>
+                    ) : urunler.length > 0 ? (
                         urunler.map((urun) => (
                             <tr key={urun.urunKodu}>
                                 <td>{urun.urunKodu}</td>
+
                                 <td>{urun.urunAdi}</td>
+
                                 <td>
+                                    {/* DÜZENLE */}
                                     <button
                                         onClick={() => handleEditClick(urun)}
                                         title="Düzenle"
@@ -125,6 +183,8 @@ export default function UrunlerTablosu() {
                                     >
                                         <FaEdit />
                                     </button>
+
+                                    {/* SİL */}
                                     <button
                                         onClick={() =>
                                             handleDelete(urun.urunKodu)
@@ -147,9 +207,12 @@ export default function UrunlerTablosu() {
                         <tr>
                             <td
                                 colSpan={3}
-                                style={{ textAlign: "center", padding: "20px" }}
+                                style={{
+                                    textAlign: "center",
+                                    padding: "20px",
+                                }}
                             >
-                                Yükleniyor...
+                                Ürün bulunamadı.
                             </td>
                         </tr>
                     )}
@@ -163,21 +226,23 @@ export default function UrunlerTablosu() {
             >
                 <UrunEkleForm
                     onClose={() => setIsEkleModalOpen(false)}
-                    onUrunEklendi={() => loadData()}
+                    onUrunEklendi={() => urunleriYenile()}
                 />
             </Modal>
 
-            <Modal
-                isOpen={isGuncelleModalOpen}
-                onClose={() => setIsGuncelleModalOpen(false)}
-                baslik="Ürün Düzenle"
-            >
-                <UrunGuncelleForm
-                    seciliUrun={seciliUrun}
+            {seciliUrun && (
+                <Modal
+                    isOpen={isGuncelleModalOpen}
                     onClose={() => setIsGuncelleModalOpen(false)}
-                    onUrunGuncellendi={() => loadData()}
-                />
-            </Modal>
+                    baslik="Ürün Düzenle"
+                >
+                    <UrunGuncelleForm
+                        seciliUrun={seciliUrun}
+                        onClose={() => setIsGuncelleModalOpen(false)}
+                        onUrunGuncellendi={() => urunleriYenile()}
+                    />
+                </Modal>
+            )}
         </div>
     );
 }

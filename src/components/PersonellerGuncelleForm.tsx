@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import type { Personel } from "../types";
 import { Toast } from "../utils";
@@ -15,62 +15,77 @@ export default function PersonelGuncelleForm({
     onPersonelGuncellendi,
 }: PersonelGuncelleFormProps) {
     const [personelId, setPersonelId] = useState<number>(0);
-    const [personelAdi, setPersonelAdi] = useState("");
-    const [personelSoyadi, setPersonelSoyadi] = useState("");
+    const [ad, setAd] = useState("");
+    const [soyad, setSoyad] = useState("");
 
     useEffect(() => {
         if (seciliPersonel) {
-            // Merkezi tipteki olası alan adlarını güvenli şekilde al
-            const id = seciliPersonel.id;
-            const ad = seciliPersonel.ad || "";
-            const soyad = seciliPersonel.soyad || "";
-
-            setPersonelId(id);
-            setPersonelAdi(ad);
-            setPersonelSoyadi(soyad);
+            setPersonelId(seciliPersonel.id);
+            setAd(seciliPersonel.ad || "");
+            setSoyad(seciliPersonel.soyad || "");
         }
     }, [seciliPersonel]);
 
-    const handleUpdate = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        const guncelVeri: Personel = {
+        if (!seciliPersonel) {
+            return;
+        }
+
+        const guncelPersonel: Personel = {
             id: personelId,
-            ad: personelAdi,
-            soyad: personelSoyadi,
+            ad,
+            soyad,
+            personelAdi: "",
+            Adi: "",
         };
 
-        apiFetch(`/Personeller/${personelId}`, {
-            method: "PUT",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(guncelVeri),
-        })
-            .then(async (res) => {
-                if (res.ok) {
-                    onPersonelGuncellendi();
-                    onClose();
-                    Toast.fire({
-                        icon: "success",
-                        title: "Personel başarıyla güncellendi!",
-                    });
-                } else {
-                    const hataDetayi = await res.text();
-                    console.error("Sunucu Hata Detayı:", hataDetayi);
-                    Toast.fire({
-                        icon: "error",
-                        title: "Güncellenemedi!",
-                    });
-                }
-            })
-            .catch((err) => console.error("Bağlantı Hatası:", err));
+        try {
+            const res = await apiFetch(`/Personeller/${personelId}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(guncelPersonel),
+            });
+
+            if (res.ok) {
+                Toast.fire({
+                    icon: "success",
+                    title: "Personel başarıyla güncellendi!",
+                });
+
+                onPersonelGuncellendi();
+                onClose();
+            } else {
+                const hataDetayi = await res.text();
+                console.error("Güncelleme hatası:", hataDetayi);
+
+                Toast.fire({
+                    icon: "error",
+                    title: "Personel güncellenemedi!",
+                });
+            }
+        } catch (error) {
+            console.error("Bağlantı hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Sunucuya ulaşılamadı!",
+            });
+        }
     };
 
     return (
         <form
-            onSubmit={handleUpdate}
-            style={{ display: "flex", flexDirection: "column", gap: "10px" }}
+            onSubmit={handleSubmit}
+            style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "10px",
+                minWidth: "300px",
+            }}
         >
             <input
                 type="text"
@@ -80,48 +95,69 @@ export default function PersonelGuncelleForm({
                 style={{
                     padding: "8px",
                     background: "#e9ecef",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
                     cursor: "not-allowed",
                 }}
             />
+
             <input
                 type="text"
                 placeholder="Personel Adı"
-                value={personelAdi}
-                onChange={(e) => setPersonelAdi(e.target.value)}
+                value={ad}
+                onChange={(e) => setAd(e.target.value)}
                 required
-                style={{ padding: "8px" }}
+                style={{
+                    padding: "8px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                }}
             />
+
             <input
                 type="text"
                 placeholder="Personel Soyadı"
-                value={personelSoyadi}
-                onChange={(e) => setPersonelSoyadi(e.target.value)}
+                value={soyad}
+                onChange={(e) => setSoyad(e.target.value)}
                 required
-                style={{ padding: "8px" }}
+                style={{
+                    padding: "8px",
+                    border: "1px solid #ccc",
+                    borderRadius: "4px",
+                }}
             />
+
             <div
                 style={{
                     display: "flex",
                     justifyContent: "flex-end",
-                    gap: "5px",
+                    gap: "8px",
                     marginTop: "10px",
                 }}
             >
                 <button
                     type="button"
                     onClick={onClose}
-                    style={{ padding: "6px 12px" }}
+                    style={{
+                        padding: "8px 14px",
+                        border: "1px solid #ccc",
+                        borderRadius: "4px",
+                        background: "#fff",
+                        cursor: "pointer",
+                    }}
                 >
                     İptal
                 </button>
+
                 <button
                     type="submit"
                     style={{
-                        padding: "6px 12px",
+                        padding: "8px 14px",
                         background: "#ffc107",
-                        color: "black",
+                        color: "#000",
                         border: "none",
                         borderRadius: "4px",
+                        cursor: "pointer",
                         fontWeight: "bold",
                     }}
                 >

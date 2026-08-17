@@ -1,9 +1,13 @@
+import type { ReactNode } from "react";
+
 export interface MusteriCreate {
     ad: string;
     soyad: string;
 }
 
 export interface Musteri {
+    musteriAdi: string;
+    Adi: string;
     id: number;
     ad: string;
     soyad: string;
@@ -15,6 +19,8 @@ export interface PersonelCreate {
 }
 
 export interface Personel {
+    personelAdi: string;
+    Adi: string;
     id: number;
     ad: string;
     soyad: string;
@@ -28,6 +34,8 @@ export interface Siparis {
 }
 
 export interface Urun {
+    ad: ReactNode;
+    id: number;
     urunKodu: string;
     urunAdi: string;
 }
