@@ -60,7 +60,6 @@ export const ElektronikListesi = () => {
     }, [elektronikler]);
 
 
-
     return (
         <div>
             <h3>Popüler Elektronik Aletler</h3>
