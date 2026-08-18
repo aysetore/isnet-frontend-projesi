@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FaTrashAlt, FaEdit } from "react-icons/fa";
 import Modal from "./Modal";
 import PersonelEkleForm from "./PersonellerEkleForm";
@@ -6,65 +6,97 @@ import PersonelGuncelleForm from "./PersonellerGuncelleForm";
 import { apiFetch } from "../api";
 import type { Personel } from "../types";
 import { Toast } from "../utils";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function PersonellerTablosu() {
     const [isEkleModalOpen, setIsEkleModalOpen] = useState(false);
     const [isGuncelleModalOpen, setIsGuncelleModalOpen] = useState(false);
     const [seciliPersonel, setSeciliPersonel] = useState<Personel | null>(null);
 
-    const {
-        data: personeller = [],
-        isLoading: personellerYukleniyor,
-        refetch: personelleriYenile,
-    } = useQuery<Personel[]>({
-        queryKey: ["personeller"],
-        queryFn: async () => {
-            const res = await apiFetch("/Personeller");
+    const queryClient = useQueryClient();
+
+    const { data: personeller = [], isLoading: personellerYukleniyor } =
+        useQuery<Personel[]>({
+            queryKey: ["personeller"],
+
+            queryFn: async () => {
+                const res = await apiFetch("/Personeller");
+
+                if (!res.ok) {
+                    throw new Error("Personeller getirilemedi.");
+                }
+
+                const data: unknown = await res.json();
+
+                const responseData = data as {
+                    data?: unknown[];
+                    Data?: unknown[];
+                };
+
+                const hamListe =
+                    responseData.data ||
+                    responseData.Data ||
+                    (Array.isArray(data) ? data : []);
+
+                const duzenlenmisListe: Personel[] = hamListe.map(
+                    (item: unknown) => {
+                        const rec = item as Record<string, unknown>;
+
+                        return {
+                            id: Number(rec.id ?? rec.Id ?? 0),
+                            ad: String(rec.ad ?? rec.Ad ?? ""),
+                            soyad: String(rec.soyad ?? rec.Soyad ?? ""),
+                            personelAdi: String(
+                                rec.personelAdi ??
+                                    rec.PersonelAdi ??
+                                    rec.ad ??
+                                    rec.Ad ??
+                                    "",
+                            ),
+                            Adi: String(rec.Adi ?? rec.ad ?? rec.Ad ?? ""),
+                        };
+                    },
+                );
+
+                return duzenlenmisListe;
+            },
+        });
+
+    const personelSilMutation = useMutation({
+        mutationFn: async (id: number) => {
+            const res = await apiFetch(`/Personeller/${id}`, {
+                method: "DELETE",
+            });
 
             if (!res.ok) {
-                throw new Error("Personeller getirilemedi.");
+                const hata = await res.text();
+
+                throw new Error(hata || "Personel silinemedi.");
             }
 
-            const data: unknown = await res.json();
+            return res;
+        },
 
-            const responseData = data as {
-                data?: unknown[];
-                Data?: unknown[];
-            };
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["personeller"],
+            });
 
-            const hamListe =
-                responseData.data ||
-                responseData.Data ||
-                (Array.isArray(data) ? data : []);
+            Toast.fire({
+                icon: "success",
+                title: "Personel silindi!",
+            });
+        },
 
-            const duzenlenmisListe: Personel[] = hamListe.map(
-                (item: unknown) => {
-                    const rec = item as Record<string, unknown>;
+        onError: (error) => {
+            console.error("Personel silme hatası:", error);
 
-                    return {
-                        id: Number(rec.id ?? rec.Id ?? 0),
-                        ad: String(rec.ad ?? rec.Ad ?? ""),
-                        soyad: String(rec.soyad ?? rec.Soyad ?? ""),
-                        personelAdi: String(
-                            rec.personelAdi ??
-                                rec.PersonelAdi ??
-                                rec.ad ??
-                                rec.Ad ??
-                                "",
-                        ),
-                        Adi: String(rec.Adi ?? rec.ad ?? rec.Ad ?? ""),
-                    };
-                },
-            );
-
-            return duzenlenmisListe;
+            Toast.fire({
+                icon: "error",
+                title: "Personel silinemedi!",
+            });
         },
     });
-
-    useEffect(() => {
-        personelleriYenile();
-    }, [personelleriYenile]);
 
     const handleDelete = async (id: number) => {
         const onay = window.confirm(
@@ -75,36 +107,7 @@ export default function PersonellerTablosu() {
             return;
         }
 
-        try {
-            const res = await apiFetch(`/Personeller/${id}`, {
-                method: "DELETE",
-            });
-
-            if (res.ok) {
-                await personelleriYenile();
-
-                Toast.fire({
-                    icon: "success",
-                    title: "Personel silindi!",
-                });
-            } else {
-                const hata = await res.text();
-
-                console.error("Personel silme hatası:", hata);
-
-                Toast.fire({
-                    icon: "error",
-                    title: "Personel silinemedi!",
-                });
-            }
-        } catch (err) {
-            console.error("Silme hatası:", err);
-
-            Toast.fire({
-                icon: "error",
-                title: "Sunucuya ulaşılamadı!",
-            });
-        }
+        await personelSilMutation.mutateAsync(id);
     };
 
     const handleEditClick = (personel: Personel) => {
@@ -120,7 +123,6 @@ export default function PersonellerTablosu() {
                 position: "relative",
             }}
         >
-            {/* BAŞLIK */}
             <div
                 style={{
                     display: "flex",
@@ -147,7 +149,6 @@ export default function PersonellerTablosu() {
                 </button>
             </div>
 
-            {/* PERSONEL TABLOSU */}
             <table
                 border={1}
                 cellPadding={10}
@@ -193,7 +194,6 @@ export default function PersonellerTablosu() {
                                 <td>{personel.soyad}</td>
 
                                 <td>
-                                    {/* DÜZENLE */}
                                     <button
                                         onClick={() =>
                                             handleEditClick(personel)
@@ -211,12 +211,12 @@ export default function PersonellerTablosu() {
                                         <FaEdit />
                                     </button>
 
-                                    {/* SİL */}
                                     <button
                                         onClick={() =>
                                             handleDelete(personel.id)
                                         }
                                         title="Sil"
+                                        disabled={personelSilMutation.isPending}
                                         style={{
                                             background: "none",
                                             border: "none",
@@ -246,21 +246,14 @@ export default function PersonellerTablosu() {
                 </tbody>
             </table>
 
-            {/* PERSONEL EKLE */}
             <Modal
                 isOpen={isEkleModalOpen}
                 onClose={() => setIsEkleModalOpen(false)}
                 baslik="Yeni Personel Ekle"
             >
-                <PersonelEkleForm
-                    onClose={() => setIsEkleModalOpen(false)}
-                    onPersonelEklendi={async () => {
-                        await personelleriYenile();
-                    }}
-                />
+                <PersonelEkleForm onClose={() => setIsEkleModalOpen(false)} />
             </Modal>
 
-            {/* PERSONEL GÜNCELLE */}
             {seciliPersonel && (
                 <Modal
                     isOpen={isGuncelleModalOpen}
@@ -270,9 +263,6 @@ export default function PersonellerTablosu() {
                     <PersonelGuncelleForm
                         seciliPersonel={seciliPersonel}
                         onClose={() => setIsGuncelleModalOpen(false)}
-                        onPersonelGuncellendi={async () => {
-                            await personelleriYenile();
-                        }}
                     />
                 </Modal>
             )}

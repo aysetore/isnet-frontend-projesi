@@ -2,18 +2,62 @@ import React, { useState } from "react";
 import { apiFetch } from "../api";
 import type { PersonelCreate } from "../types";
 import { Toast } from "../utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface PersonelEkleFormProps {
     onClose: () => void;
-    onPersonelEklendi: () => void;
 }
 
-export default function PersonelEkleForm({
-    onClose,
-    onPersonelEklendi,
-}: PersonelEkleFormProps) {
+export default function PersonelEkleForm({ onClose }: PersonelEkleFormProps) {
     const [ad, setAd] = useState("");
     const [soyad, setSoyad] = useState("");
+
+    const queryClient = useQueryClient();
+
+    const personelEkleMutation = useMutation({
+        mutationFn: async (yeniPersonel: PersonelCreate) => {
+            const res = await apiFetch("/Personeller", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(yeniPersonel),
+            });
+
+            if (!res.ok) {
+                const hata = await res.text();
+
+                throw new Error(hata || "Personel eklenemedi.");
+            }
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["personeller"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Personel başarıyla kaydedildi!",
+            });
+
+            setAd("");
+            setSoyad("");
+
+            onClose();
+        },
+
+        onError: (error) => {
+            console.error("Personel ekleme hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Personel eklenemedi!",
+            });
+        },
+    });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -23,43 +67,7 @@ export default function PersonelEkleForm({
             soyad,
         };
 
-        try {
-            const res = await apiFetch("/Personeller", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(yeniPersonel),
-            });
-
-            if (res.ok) {
-                Toast.fire({
-                    icon: "success",
-                    title: "Personel başarıyla kaydedildi!",
-                });
-
-                onPersonelEklendi();
-                onClose();
-
-                setAd("");
-                setSoyad("");
-            } else {
-                const hata = await res.text();
-                console.error("Personel ekleme hatası:", hata);
-
-                Toast.fire({
-                    icon: "error",
-                    title: "Personel eklenemedi!",
-                });
-            }
-        } catch (error) {
-            console.error("Bağlantı hatası:", error);
-
-            Toast.fire({
-                icon: "error",
-                title: "Sunucuya ulaşılamadı!",
-            });
-        }
+        await personelEkleMutation.mutateAsync(yeniPersonel);
     };
 
     return (
@@ -122,6 +130,7 @@ export default function PersonelEkleForm({
 
                 <button
                     type="submit"
+                    disabled={personelEkleMutation.isPending}
                     style={{
                         padding: "8px 14px",
                         background: "#28a745",
@@ -132,7 +141,9 @@ export default function PersonelEkleForm({
                         fontWeight: "bold",
                     }}
                 >
-                    Kaydet
+                    {personelEkleMutation.isPending
+                        ? "Kaydediliyor..."
+                        : "Kaydet"}
                 </button>
             </div>
         </form>

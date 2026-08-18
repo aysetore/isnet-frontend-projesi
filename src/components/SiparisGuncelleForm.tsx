@@ -25,9 +25,6 @@ export default function SiparisGuncelleForm({
 
     const queryClient = useQueryClient();
 
-    // =========================================================
-    // MÜŞTERİLER
-    // =========================================================
     const { data: musteriler = [], isLoading: musterilerYukleniyor } = useQuery<
         Musteri[]
     >({
@@ -45,9 +42,6 @@ export default function SiparisGuncelleForm({
         },
     });
 
-    // =========================================================
-    // PERSONELLER
-    // =========================================================
     const { data: personeller = [], isLoading: personellerYukleniyor } =
         useQuery<Personel[]>({
             queryKey: ["personeller"],
@@ -66,9 +60,6 @@ export default function SiparisGuncelleForm({
             },
         });
 
-    // =========================================================
-    // SİPARİŞ GÜNCELLEME
-    // =========================================================
     const siparisGuncelleMutation = useMutation({
         mutationFn: async () => {
             const updated = {
@@ -121,10 +112,7 @@ export default function SiparisGuncelleForm({
         },
     });
 
-    // =========================================================
-    // FORM SUBMIT
-    // =========================================================
-    const handleSubmit = (e: FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
         if (!musteriId || !personelId) {
@@ -136,7 +124,7 @@ export default function SiparisGuncelleForm({
             return;
         }
 
-        siparisGuncelleMutation.mutate();
+        await siparisGuncelleMutation.mutateAsync();
     };
 
     const yukleniyor = musterilerYukleniyor || personellerYukleniyor;

@@ -442,7 +442,7 @@ export default function SiparislerTablosu() {
             return;
         }
 
-        siparisSilMutation.mutate(id);
+        await siparisSilMutation.mutateAsync(id);
     };
 
     return (

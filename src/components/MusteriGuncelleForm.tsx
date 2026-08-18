@@ -2,22 +2,22 @@ import { useEffect, useState, type FormEvent } from "react";
 import { apiFetch } from "../api";
 import type { Musteri } from "../types";
 import { Toast } from "../utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface MusteriGuncelleFormProps {
     seciliMusteri: Musteri | null;
     onClose: () => void;
-    onMusteriGuncellendi: () => void;
 }
 
 export default function MusteriGuncelleForm({
     seciliMusteri,
     onClose,
-    onMusteriGuncellendi,
 }: MusteriGuncelleFormProps) {
     const [id, setId] = useState<number>(0);
     const [ad, setAd] = useState("");
     const [soyad, setSoyad] = useState("");
-    const [yukleniyor, setYukleniyor] = useState(false);
+
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         if (seciliMusteri) {
@@ -27,6 +27,48 @@ export default function MusteriGuncelleForm({
         }
     }, [seciliMusteri]);
 
+    const musteriGuncelleMutation = useMutation({
+        mutationFn: async (guncelVeri: Musteri) => {
+            const res = await apiFetch(`/Musteriler/${guncelVeri.id}`, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(guncelVeri),
+            });
+
+            if (!res.ok) {
+                const hata = await res.text();
+
+                throw new Error(hata || "Müşteri güncellenemedi.");
+            }
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["musteriler"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Müşteri başarıyla güncellendi!",
+            });
+
+            onClose();
+        },
+
+        onError: (error) => {
+            console.error("Müşteri güncelleme hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Müşteri güncellenemedi!",
+            });
+        },
+    });
+
     const handleUpdate = async (e: FormEvent) => {
         e.preventDefault();
 
@@ -35,6 +77,7 @@ export default function MusteriGuncelleForm({
                 icon: "error",
                 title: "Müşteri bilgisi bulunamadı!",
             });
+
             return;
         }
 
@@ -43,54 +86,19 @@ export default function MusteriGuncelleForm({
                 icon: "warning",
                 title: "Lütfen ad ve soyad giriniz.",
             });
+
             return;
         }
 
-        setYukleniyor(true);
-
-        const guncelVeri = {
-            id: id,
+        const guncelVeri: Musteri = {
+            id,
             ad: ad.trim(),
             soyad: soyad.trim(),
+            musteriAdi: "",
+            Adi: "",
         };
 
-        try {
-            const res = await apiFetch(`/Musteriler/${id}`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(guncelVeri),
-            });
-
-            if (res.ok) {
-                Toast.fire({
-                    icon: "success",
-                    title: "Müşteri başarıyla güncellendi!",
-                });
-
-                onMusteriGuncellendi();
-                onClose();
-            } else {
-                const hataDetayi = await res.text();
-
-                console.error("Güncelleme hatası:", hataDetayi);
-
-                Toast.fire({
-                    icon: "error",
-                    title: "Müşteri güncellenemedi!",
-                });
-            }
-        } catch (err) {
-            console.error("Bağlantı hatası:", err);
-
-            Toast.fire({
-                icon: "error",
-                title: "Sunucuya ulaşılamadı!",
-            });
-        } finally {
-            setYukleniyor(false);
-        }
+        await musteriGuncelleMutation.mutateAsync(guncelVeri);
     };
 
     return (
@@ -156,6 +164,7 @@ export default function MusteriGuncelleForm({
                     value={ad}
                     onChange={(e) => setAd(e.target.value)}
                     required
+                    disabled={musteriGuncelleMutation.isPending}
                     style={{
                         padding: "9px",
                         border: "1px solid #ccc",
@@ -187,6 +196,7 @@ export default function MusteriGuncelleForm({
                     value={soyad}
                     onChange={(e) => setSoyad(e.target.value)}
                     required
+                    disabled={musteriGuncelleMutation.isPending}
                     style={{
                         padding: "9px",
                         border: "1px solid #ccc",
@@ -207,14 +217,16 @@ export default function MusteriGuncelleForm({
                 <button
                     type="button"
                     onClick={onClose}
-                    disabled={yukleniyor}
+                    disabled={musteriGuncelleMutation.isPending}
                     style={{
                         padding: "9px 15px",
                         backgroundColor: "#6c757d",
                         color: "white",
                         border: "none",
                         borderRadius: "4px",
-                        cursor: yukleniyor ? "not-allowed" : "pointer",
+                        cursor: musteriGuncelleMutation.isPending
+                            ? "not-allowed"
+                            : "pointer",
                     }}
                 >
                     İptal
@@ -222,18 +234,22 @@ export default function MusteriGuncelleForm({
 
                 <button
                     type="submit"
-                    disabled={yukleniyor}
+                    disabled={musteriGuncelleMutation.isPending}
                     style={{
                         padding: "9px 15px",
                         backgroundColor: "#ffc107",
                         color: "#000",
                         border: "none",
                         borderRadius: "4px",
-                        cursor: yukleniyor ? "not-allowed" : "pointer",
+                        cursor: musteriGuncelleMutation.isPending
+                            ? "not-allowed"
+                            : "pointer",
                         fontWeight: "bold",
                     }}
                 >
-                    {yukleniyor ? "Güncelleniyor..." : "Güncelle"}
+                    {musteriGuncelleMutation.isPending
+                        ? "Güncelleniyor..."
+                        : "Güncelle"}
                 </button>
             </div>
         </form>

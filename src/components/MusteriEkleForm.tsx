@@ -2,19 +2,62 @@ import { useState, type FormEvent } from "react";
 import { apiFetch } from "../api";
 import type { MusteriCreate } from "../types";
 import { Toast } from "../utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface MusteriEkleFormProps {
     onClose: () => void;
-    onMusteriEklendi: () => void;
 }
 
-export default function MusteriEkleForm({
-    onClose,
-    onMusteriEklendi,
-}: MusteriEkleFormProps) {
+export default function MusteriEkleForm({ onClose }: MusteriEkleFormProps) {
     const [ad, setAd] = useState("");
     const [soyad, setSoyad] = useState("");
-    const [yukleniyor, setYukleniyor] = useState(false);
+
+    const queryClient = useQueryClient();
+
+    const musteriEkleMutation = useMutation({
+        mutationFn: async (yeniMusteri: MusteriCreate) => {
+            const res = await apiFetch("/Musteriler", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(yeniMusteri),
+            });
+
+            if (!res.ok) {
+                const hata = await res.text();
+
+                throw new Error(hata || "Müşteri eklenemedi.");
+            }
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["musteriler"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Müşteri başarıyla kaydedildi!",
+            });
+
+            setAd("");
+            setSoyad("");
+
+            onClose();
+        },
+
+        onError: (error) => {
+            console.error("Müşteri ekleme hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Müşteri eklenemedi!",
+            });
+        },
+    });
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -24,56 +67,16 @@ export default function MusteriEkleForm({
                 icon: "warning",
                 title: "Lütfen ad ve soyad giriniz.",
             });
+
             return;
         }
-
-        setYukleniyor(true);
 
         const yeniMusteri: MusteriCreate = {
             ad: ad.trim(),
             soyad: soyad.trim(),
         };
 
-        try {
-            const res = await apiFetch("/Musteriler", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(yeniMusteri),
-            });
-
-            if (res.ok) {
-                Toast.fire({
-                    icon: "success",
-                    title: "Müşteri başarıyla kaydedildi!",
-                });
-
-                setAd("");
-                setSoyad("");
-
-                onMusteriEklendi();
-                onClose();
-            } else {
-                const hata = await res.text();
-
-                console.error("Müşteri ekleme hatası:", hata);
-
-                Toast.fire({
-                    icon: "error",
-                    title: "Müşteri eklenemedi!",
-                });
-            }
-        } catch (err) {
-            console.error("Müşteri ekleme hatası:", err);
-
-            Toast.fire({
-                icon: "error",
-                title: "Sunucuya ulaşılamadı!",
-            });
-        } finally {
-            setYukleniyor(false);
-        }
+        await musteriEkleMutation.mutateAsync(yeniMusteri);
     };
 
     return (
@@ -109,6 +112,7 @@ export default function MusteriEkleForm({
                     value={ad}
                     onChange={(e) => setAd(e.target.value)}
                     required
+                    disabled={musteriEkleMutation.isPending}
                     style={{
                         padding: "9px",
                         borderRadius: "4px",
@@ -140,6 +144,7 @@ export default function MusteriEkleForm({
                     value={soyad}
                     onChange={(e) => setSoyad(e.target.value)}
                     required
+                    disabled={musteriEkleMutation.isPending}
                     style={{
                         padding: "9px",
                         borderRadius: "4px",
@@ -160,14 +165,16 @@ export default function MusteriEkleForm({
                 <button
                     type="button"
                     onClick={onClose}
-                    disabled={yukleniyor}
+                    disabled={musteriEkleMutation.isPending}
                     style={{
                         padding: "9px 15px",
                         backgroundColor: "#6c757d",
                         color: "white",
                         border: "none",
                         borderRadius: "4px",
-                        cursor: yukleniyor ? "not-allowed" : "pointer",
+                        cursor: musteriEkleMutation.isPending
+                            ? "not-allowed"
+                            : "pointer",
                     }}
                 >
                     İptal
@@ -175,18 +182,22 @@ export default function MusteriEkleForm({
 
                 <button
                     type="submit"
-                    disabled={yukleniyor}
+                    disabled={musteriEkleMutation.isPending}
                     style={{
                         padding: "9px 15px",
                         backgroundColor: "#28a745",
                         color: "white",
                         border: "none",
                         borderRadius: "4px",
-                        cursor: yukleniyor ? "not-allowed" : "pointer",
+                        cursor: musteriEkleMutation.isPending
+                            ? "not-allowed"
+                            : "pointer",
                         fontWeight: "bold",
                     }}
                 >
-                    {yukleniyor ? "Kaydediliyor..." : "Kaydet"}
+                    {musteriEkleMutation.isPending
+                        ? "Kaydediliyor..."
+                        : "Kaydet"}
                 </button>
             </div>
         </form>

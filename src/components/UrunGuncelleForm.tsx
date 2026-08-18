@@ -2,20 +2,21 @@ import React, { useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import type { Urun } from "../types";
 import { Toast } from "../utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface UrunGuncelleFormProps {
     seciliUrun: Urun | null;
     onClose: () => void;
-    onUrunGuncellendi: () => void;
 }
 
 export default function UrunGuncelleForm({
     seciliUrun,
     onClose,
-    onUrunGuncellendi,
 }: UrunGuncelleFormProps) {
     const [urunKodu, setUrunKodu] = useState("");
     const [urunAdi, setUrunAdi] = useState("");
+
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         if (seciliUrun) {
@@ -24,19 +25,17 @@ export default function UrunGuncelleForm({
         }
     }, [seciliUrun]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const urunGuncelleMutation = useMutation({
+        mutationFn: async () => {
+            if (!seciliUrun) {
+                throw new Error("Güncellenecek ürün bulunamadı.");
+            }
 
-        if (!seciliUrun) {
-            return;
-        }
+            const guncelVeri = {
+                UrunKodu: urunKodu,
+                UrunAd: urunAdi,
+            };
 
-        const guncelVeri = {
-            UrunKodu: urunKodu,
-            UrunAd: urunAdi,
-        };
-
-        try {
             const res = await apiFetch(`/Urunler/${urunKodu}`, {
                 method: "PUT",
                 headers: {
@@ -45,31 +44,41 @@ export default function UrunGuncelleForm({
                 body: JSON.stringify(guncelVeri),
             });
 
-            if (res.ok) {
-                Toast.fire({
-                    icon: "success",
-                    title: "Ürün başarıyla güncellendi!",
-                });
-
-                onUrunGuncellendi();
-                onClose();
-            } else {
+            if (!res.ok) {
                 const hataDetayi = await res.text();
-                console.error("Ürün güncelleme hatası:", hataDetayi);
-
-                Toast.fire({
-                    icon: "error",
-                    title: "Ürün güncellenemedi!",
-                });
+                throw new Error(hataDetayi || "Ürün güncellenemedi.");
             }
-        } catch (error) {
-            console.error("Bağlantı hatası:", error);
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["urunler"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Ürün başarıyla güncellendi!",
+            });
+
+            onClose();
+        },
+
+        onError: (error) => {
+            console.error("Ürün güncelleme hatası:", error);
 
             Toast.fire({
                 icon: "error",
-                title: "Sunucuya ulaşılamadı!",
+                title: "Ürün güncellenemedi!",
             });
-        }
+        },
+    });
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        await urunGuncelleMutation.mutateAsync();
     };
 
     return (
@@ -133,6 +142,7 @@ export default function UrunGuncelleForm({
 
                 <button
                     type="submit"
+                    disabled={urunGuncelleMutation.isPending}
                     style={{
                         padding: "8px 14px",
                         background: "#ffc107",
@@ -143,7 +153,9 @@ export default function UrunGuncelleForm({
                         fontWeight: "bold",
                     }}
                 >
-                    Güncelle
+                    {urunGuncelleMutation.isPending
+                        ? "Güncelleniyor..."
+                        : "Güncelle"}
                 </button>
             </div>
         </form>

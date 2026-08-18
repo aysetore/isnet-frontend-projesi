@@ -2,18 +2,60 @@ import React, { useState } from "react";
 import { apiFetch } from "../api";
 import type { Urun } from "../types";
 import { Toast } from "../utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface UrunEkleFormProps {
     onClose: () => void;
-    onUrunEklendi: () => void;
 }
 
-export default function UrunEkleForm({
-    onClose,
-    onUrunEklendi,
-}: UrunEkleFormProps) {
+export default function UrunEkleForm({ onClose }: UrunEkleFormProps) {
     const [urunKodu, setUrunKodu] = useState("");
     const [urunAdi, setUrunAdi] = useState("");
+
+    const queryClient = useQueryClient();
+
+    const urunEkleMutation = useMutation({
+        mutationFn: async (yeniUrun: Urun) => {
+            const res = await apiFetch("/Urunler", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(yeniUrun),
+            });
+
+            if (!res.ok) {
+                const hata = await res.text();
+                throw new Error(hata || "Ürün eklenemedi.");
+            }
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["urunler"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Ürün başarıyla kaydedildi!",
+            });
+
+            setUrunKodu("");
+            setUrunAdi("");
+            onClose();
+        },
+
+        onError: (error) => {
+            console.error("Ürün ekleme hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Bu ürün kodu zaten mevcut!",
+            });
+        },
+    });
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -25,43 +67,7 @@ export default function UrunEkleForm({
             ad: undefined,
         };
 
-        try {
-            const res = await apiFetch("/Urunler", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify(yeniUrun),
-            });
-
-            if (res.ok) {
-                Toast.fire({
-                    icon: "success",
-                    title: "Ürün başarıyla kaydedildi!",
-                });
-
-                onUrunEklendi();
-                onClose();
-
-                setUrunKodu("");
-                setUrunAdi("");
-            } else {
-                const hata = await res.text();
-                console.error("Ürün ekleme hatası:", hata);
-
-                Toast.fire({
-                    icon: "error",
-                    title: "Bu ürün kodu zaten mevcut!",
-                });
-            }
-        } catch (error) {
-            console.error("Bağlantı hatası:", error);
-
-            Toast.fire({
-                icon: "error",
-                title: "Sunucuya ulaşılamadı!",
-            });
-        }
+        await urunEkleMutation.mutateAsync(yeniUrun);
     };
 
     return (
@@ -124,6 +130,7 @@ export default function UrunEkleForm({
 
                 <button
                     type="submit"
+                    disabled={urunEkleMutation.isPending}
                     style={{
                         padding: "8px 14px",
                         background: "#28a745",
@@ -134,7 +141,7 @@ export default function UrunEkleForm({
                         fontWeight: "bold",
                     }}
                 >
-                    Kaydet
+                    {urunEkleMutation.isPending ? "Kaydediliyor..." : "Kaydet"}
                 </button>
             </div>
         </form>

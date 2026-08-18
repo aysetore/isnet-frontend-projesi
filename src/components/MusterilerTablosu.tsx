@@ -7,18 +7,18 @@ import MusteriGuncelleForm from "./MusteriGuncelleForm";
 import { apiFetch } from "../api";
 import type { Musteri } from "../types";
 import { Toast } from "../utils";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function MusterilerTablosu() {
     const [isEkleModalOpen, setIsEkleModalOpen] = useState(false);
     const [isGuncelleModalOpen, setIsGuncelleModalOpen] = useState(false);
     const [seciliMusteri, setSeciliMusteri] = useState<Musteri | null>(null);
 
-    const {
-        data: musteriler = [],
-        isLoading: musterilerYukleniyor,
-        refetch: musterileriYenile,
-    } = useQuery<Musteri[]>({
+    const queryClient = useQueryClient();
+
+    const { data: musteriler = [], isLoading: musterilerYukleniyor } = useQuery<
+        Musteri[]
+    >({
         queryKey: ["musteriler"],
 
         queryFn: async () => {
@@ -28,12 +28,79 @@ export default function MusterilerTablosu() {
                 throw new Error("Müşteriler getirilemedi.");
             }
 
-            const data = await res.json();
+            const data: unknown = await res.json();
 
-            const liste =
-                data.data || data.Data || (Array.isArray(data) ? data : []);
+            const responseData = data as {
+                data?: unknown[];
+                Data?: unknown[];
+            };
 
-            return liste;
+            const hamListe =
+                responseData.data ||
+                responseData.Data ||
+                (Array.isArray(data) ? data : []);
+
+            const duzenlenmisListe: Musteri[] = hamListe.map(
+                (item: unknown) => {
+                    const rec = item as Record<string, unknown>;
+
+                    return {
+                        id: Number(rec.id ?? rec.Id ?? 0),
+
+                        ad: String(rec.ad ?? rec.Ad ?? ""),
+
+                        soyad: String(rec.soyad ?? rec.Soyad ?? ""),
+
+                        musteriAdi: String(
+                            rec.musteriAdi ??
+                                rec.MusteriAdi ??
+                                rec.ad ??
+                                rec.Ad ??
+                                "",
+                        ),
+
+                        Adi: String(rec.Adi ?? rec.ad ?? rec.Ad ?? ""),
+                    };
+                },
+            );
+
+            return duzenlenmisListe;
+        },
+    });
+
+    const musteriSilMutation = useMutation({
+        mutationFn: async (id: number) => {
+            const res = await apiFetch(`/Musteriler/${id}`, {
+                method: "DELETE",
+            });
+
+            if (!res.ok) {
+                const hata = await res.text();
+
+                throw new Error(hata || "Müşteri silinemedi.");
+            }
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["musteriler"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Müşteri silindi!",
+            });
+        },
+
+        onError: (error) => {
+            console.error("Müşteri silme hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Müşteri silinemedi!",
+            });
         },
     });
 
@@ -53,32 +120,7 @@ export default function MusterilerTablosu() {
             return;
         }
 
-        try {
-            const res = await apiFetch(`/Musteriler/${id}`, {
-                method: "DELETE",
-            });
-
-            if (res.ok) {
-                await musterileriYenile();
-
-                Toast.fire({
-                    icon: "success",
-                    title: "Müşteri silindi!",
-                });
-            } else {
-                Toast.fire({
-                    icon: "error",
-                    title: "Silinemedi!",
-                });
-            }
-        } catch (err) {
-            console.error("Müşteri silme hatası:", err);
-
-            Toast.fire({
-                icon: "error",
-                title: "Sunucuya ulaşılamadı!",
-            });
-        }
+        await musteriSilMutation.mutateAsync(id);
     };
 
     const handleEditClick = (musteri: Musteri) => {
@@ -94,7 +136,6 @@ export default function MusterilerTablosu() {
                 position: "relative",
             }}
         >
-            {/* BAŞLIK */}
             <div
                 style={{
                     display: "flex",
@@ -121,7 +162,7 @@ export default function MusterilerTablosu() {
                 </button>
             </div>
 
-            {/* MÜŞTERİ TABLOSU */}
+           
             <table
                 border={1}
                 cellPadding={10}
@@ -187,10 +228,13 @@ export default function MusterilerTablosu() {
                                     <button
                                         onClick={() => handleDelete(musteri.id)}
                                         title="Sil"
+                                        disabled={musteriSilMutation.isPending}
                                         style={{
                                             background: "none",
                                             border: "none",
-                                            cursor: "pointer",
+                                            cursor: musteriSilMutation.isPending
+                                                ? "not-allowed"
+                                                : "pointer",
                                             color: "#dc3545",
                                             fontSize: "18px",
                                         }}
@@ -216,21 +260,16 @@ export default function MusterilerTablosu() {
                 </tbody>
             </table>
 
-            {/* =====================================================
-                YENİ MÜŞTERİ EKLE
-            ===================================================== */}
-
+           
             <Modal
                 isOpen={isEkleModalOpen}
                 onClose={() => setIsEkleModalOpen(false)}
                 baslik="Yeni Müşteri Ekle"
             >
-                <MusteriEkleForm
-                    onClose={() => setIsEkleModalOpen(false)}
-                    onMusteriEklendi={() => musterileriYenile()}
-                />
+                <MusteriEkleForm onClose={() => setIsEkleModalOpen(false)} />
             </Modal>
 
+      
             {seciliMusteri && (
                 <Modal
                     isOpen={isGuncelleModalOpen}
@@ -240,7 +279,6 @@ export default function MusterilerTablosu() {
                     <MusteriGuncelleForm
                         seciliMusteri={seciliMusteri}
                         onClose={() => setIsGuncelleModalOpen(false)}
-                        onMusteriGuncellendi={() => musterileriYenile()}
                     />
                 </Modal>
             )}

@@ -18,9 +18,6 @@ export default function SiparisEkleForm({
 
     const queryClient = useQueryClient();
 
-    // =========================================================
-    // MÜŞTERİLER
-    // =========================================================
     const { data: musteriler = [], isLoading: musterilerYukleniyor } = useQuery<
         Musteri[]
     >({
@@ -38,9 +35,6 @@ export default function SiparisEkleForm({
         },
     });
 
-    // =========================================================
-    // PERSONELLER
-    // =========================================================
     const { data: personeller = [], isLoading: personellerYukleniyor } =
         useQuery<Personel[]>({
             queryKey: ["personeller"],
@@ -59,9 +53,6 @@ export default function SiparisEkleForm({
             },
         });
 
-    // =========================================================
-    // SİPARİŞ EKLEME
-    // =========================================================
     const siparisEkleMutation = useMutation({
         mutationFn: async () => {
             const res = await apiFetch("/Siparisler", {
@@ -83,13 +74,10 @@ export default function SiparisEkleForm({
         },
 
         onSuccess: async () => {
-            // Sipariş listesi cache'ini güncelle
             await queryClient.invalidateQueries({
                 queryKey: ["siparisler"],
             });
 
-            // Mevcut yapımızla uyumlu olması için
-            // parent component'e de haber veriyoruz.
             onSiparisEklendi();
 
             onClose();
@@ -102,10 +90,7 @@ export default function SiparisEkleForm({
         },
     });
 
-    // =========================================================
-    // FORM SUBMIT
-    // =========================================================
-    const handleSubmit = (e: FormEvent) => {
+    const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
 
         if (!musteriId || !personelId) {
@@ -117,7 +102,7 @@ export default function SiparisEkleForm({
             return;
         }
 
-        siparisEkleMutation.mutate();
+        await siparisEkleMutation.mutateAsync();
     };
 
     const yukleniyor = musterilerYukleniyor || personellerYukleniyor;

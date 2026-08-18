@@ -2,21 +2,22 @@ import React, { useEffect, useState } from "react";
 import { apiFetch } from "../api";
 import type { Personel } from "../types";
 import { Toast } from "../utils";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface PersonelGuncelleFormProps {
     seciliPersonel: Personel | null;
     onClose: () => void;
-    onPersonelGuncellendi: () => void;
 }
 
 export default function PersonelGuncelleForm({
     seciliPersonel,
     onClose,
-    onPersonelGuncellendi,
 }: PersonelGuncelleFormProps) {
     const [personelId, setPersonelId] = useState<number>(0);
     const [ad, setAd] = useState("");
     const [soyad, setSoyad] = useState("");
+
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         if (seciliPersonel) {
@@ -26,22 +27,20 @@ export default function PersonelGuncelleForm({
         }
     }, [seciliPersonel]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const personelGuncelleMutation = useMutation({
+        mutationFn: async () => {
+            if (!seciliPersonel) {
+                throw new Error("Güncellenecek personel bulunamadı.");
+            }
 
-        if (!seciliPersonel) {
-            return;
-        }
+            const guncelPersonel: Personel = {
+                id: personelId,
+                ad,
+                soyad,
+                personelAdi: "",
+                Adi: "",
+            };
 
-        const guncelPersonel: Personel = {
-            id: personelId,
-            ad,
-            soyad,
-            personelAdi: "",
-            Adi: "",
-        };
-
-        try {
             const res = await apiFetch(`/Personeller/${personelId}`, {
                 method: "PUT",
                 headers: {
@@ -50,31 +49,42 @@ export default function PersonelGuncelleForm({
                 body: JSON.stringify(guncelPersonel),
             });
 
-            if (res.ok) {
-                Toast.fire({
-                    icon: "success",
-                    title: "Personel başarıyla güncellendi!",
-                });
-
-                onPersonelGuncellendi();
-                onClose();
-            } else {
+            if (!res.ok) {
                 const hataDetayi = await res.text();
-                console.error("Güncelleme hatası:", hataDetayi);
 
-                Toast.fire({
-                    icon: "error",
-                    title: "Personel güncellenemedi!",
-                });
+                throw new Error(hataDetayi || "Personel güncellenemedi.");
             }
-        } catch (error) {
-            console.error("Bağlantı hatası:", error);
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["personeller"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Personel başarıyla güncellendi!",
+            });
+
+            onClose();
+        },
+
+        onError: (error) => {
+            console.error("Güncelleme hatası:", error);
 
             Toast.fire({
                 icon: "error",
-                title: "Sunucuya ulaşılamadı!",
+                title: "Personel güncellenemedi!",
             });
-        }
+        },
+    });
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+
+        await personelGuncelleMutation.mutateAsync();
     };
 
     return (
@@ -151,6 +161,7 @@ export default function PersonelGuncelleForm({
 
                 <button
                     type="submit"
+                    disabled={personelGuncelleMutation.isPending}
                     style={{
                         padding: "8px 14px",
                         background: "#ffc107",
@@ -161,7 +172,9 @@ export default function PersonelGuncelleForm({
                         fontWeight: "bold",
                     }}
                 >
-                    Güncelle
+                    {personelGuncelleMutation.isPending
+                        ? "Güncelleniyor..."
+                        : "Güncelle"}
                 </button>
             </div>
         </form>

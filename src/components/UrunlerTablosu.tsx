@@ -7,18 +7,18 @@ import UrunGuncelleForm from "./UrunGuncelleForm";
 import { apiFetch } from "../api";
 import type { Urun } from "../types";
 import { Toast } from "../utils";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 export default function UrunlerTablosu() {
     const [isEkleModalOpen, setIsEkleModalOpen] = useState(false);
     const [isGuncelleModalOpen, setIsGuncelleModalOpen] = useState(false);
     const [seciliUrun, setSeciliUrun] = useState<Urun | null>(null);
 
-    const {
-        data: urunler = [],
-        isLoading: urunlerYukleniyor,
-        refetch: urunleriYenile,
-    } = useQuery<Urun[]>({
+    const queryClient = useQueryClient();
+
+    const { data: urunler = [], isLoading: urunlerYukleniyor } = useQuery<
+        Urun[]
+    >({
         queryKey: ["urunler"],
 
         queryFn: async () => {
@@ -34,6 +34,41 @@ export default function UrunlerTablosu() {
                 data.data || data.Data || (Array.isArray(data) ? data : []);
 
             return liste;
+        },
+    });
+
+    const urunSilMutation = useMutation({
+        mutationFn: async (urunKodu: string) => {
+            const res = await apiFetch(`/Urunler/${urunKodu}`, {
+                method: "DELETE",
+            });
+
+            if (!res.ok) {
+                const hata = await res.text();
+                throw new Error(hata || "Ürün silinemedi.");
+            }
+
+            return res;
+        },
+
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ["urunler"],
+            });
+
+            Toast.fire({
+                icon: "success",
+                title: "Ürün silindi!",
+            });
+        },
+
+        onError: (error) => {
+            console.error("Ürün silme hatası:", error);
+
+            Toast.fire({
+                icon: "error",
+                title: "Ürün silinemedi!",
+            });
         },
     });
 
@@ -53,36 +88,7 @@ export default function UrunlerTablosu() {
             return;
         }
 
-        try {
-            const res = await apiFetch(`/Urunler/${urunKodu}`, {
-                method: "DELETE",
-            });
-
-            if (res.ok) {
-                await urunleriYenile();
-
-                Toast.fire({
-                    icon: "success",
-                    title: "Ürün silindi!",
-                });
-            } else {
-                const hata = await res.text();
-
-                console.error("Ürün silme hatası:", hata);
-
-                Toast.fire({
-                    icon: "error",
-                    title: "Ürün silinemedi!",
-                });
-            }
-        } catch (error) {
-            console.error("Silme hatası:", error);
-
-            Toast.fire({
-                icon: "error",
-                title: "Sunucuya ulaşılamadı!",
-            });
-        }
+        await urunSilMutation.mutateAsync(urunKodu);
     };
 
     const handleEditClick = (urun: Urun) => {
@@ -98,7 +104,6 @@ export default function UrunlerTablosu() {
                 position: "relative",
             }}
         >
-            {/* BAŞLIK */}
             <div
                 style={{
                     display: "flex",
@@ -125,7 +130,6 @@ export default function UrunlerTablosu() {
                 </button>
             </div>
 
-            {/* ÜRÜN TABLOSU */}
             <table
                 border={1}
                 cellPadding={10}
@@ -164,11 +168,9 @@ export default function UrunlerTablosu() {
                         urunler.map((urun) => (
                             <tr key={urun.urunKodu}>
                                 <td>{urun.urunKodu}</td>
-
                                 <td>{urun.urunAdi}</td>
 
                                 <td>
-                                    {/* DÜZENLE */}
                                     <button
                                         onClick={() => handleEditClick(urun)}
                                         title="Düzenle"
@@ -184,12 +186,12 @@ export default function UrunlerTablosu() {
                                         <FaEdit />
                                     </button>
 
-                                    {/* SİL */}
                                     <button
                                         onClick={() =>
                                             handleDelete(urun.urunKodu)
                                         }
                                         title="Sil"
+                                        disabled={urunSilMutation.isPending}
                                         style={{
                                             background: "none",
                                             border: "none",
@@ -224,10 +226,7 @@ export default function UrunlerTablosu() {
                 onClose={() => setIsEkleModalOpen(false)}
                 baslik="Yeni Ürün Ekle"
             >
-                <UrunEkleForm
-                    onClose={() => setIsEkleModalOpen(false)}
-                    onUrunEklendi={() => urunleriYenile()}
-                />
+                <UrunEkleForm onClose={() => setIsEkleModalOpen(false)} />
             </Modal>
 
             {seciliUrun && (
@@ -239,7 +238,6 @@ export default function UrunlerTablosu() {
                     <UrunGuncelleForm
                         seciliUrun={seciliUrun}
                         onClose={() => setIsGuncelleModalOpen(false)}
-                        onUrunGuncellendi={() => urunleriYenile()}
                     />
                 </Modal>
             )}
